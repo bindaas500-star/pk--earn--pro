@@ -1,0 +1,6 @@
+{
+  "name": "PK Earn Pro",
+  "description": "A premium, production-ready Android earning application featuring daily tasks, referral systems, withdrawal methods, and admin dashboards with secure offline local caching.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
