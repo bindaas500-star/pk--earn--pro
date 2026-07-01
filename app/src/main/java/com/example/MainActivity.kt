@@ -97,7 +97,7 @@ fun AppNavigationHost(viewModel: EarnViewModel) {
 
     NavHost(
         navController = navController,
-        startDestination = "auth",
+        startDestination = "splash",
         modifier = Modifier.fillMaxSize()
     ) {
         composable("splash") {

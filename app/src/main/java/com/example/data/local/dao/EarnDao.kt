@@ -64,4 +64,7 @@ interface EarnDao {
 
     @Query("DELETE FROM leaderboard")
     suspend fun clearLeaderboard()
+
+    @Query("DELETE FROM user_profile")
+    suspend fun clearUserProfile()
 }

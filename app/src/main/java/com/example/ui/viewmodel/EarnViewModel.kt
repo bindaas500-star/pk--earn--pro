@@ -18,6 +18,7 @@ class EarnViewModel(application: Application) : AndroidViewModel(application) {
 
     private val database = AppDatabase.getDatabase(application)
     private val repository = EarnRepository(database.earnDao())
+    private val prefs = application.getSharedPreferences("pk_earn_prefs", Context.MODE_PRIVATE)
 
     // Security Status Flags
     private val _isRooted = MutableStateFlow(false)
@@ -83,6 +84,18 @@ class EarnViewModel(application: Application) : AndroidViewModel(application) {
         checkSecurityFlags(application)
         viewModelScope.launch {
             repository.seedInitialData()
+            val rememberMe = prefs.getBoolean("remember_me", false)
+            val isLoggedIn = prefs.getBoolean("is_logged_in", false)
+            val savedUid = prefs.getString("logged_in_uid", null)
+            if (!rememberMe || !isLoggedIn || savedUid == null) {
+                repository.logout()
+                prefs.edit()
+                    .putBoolean("is_logged_in", false)
+                    .putString("logged_in_uid", null)
+                    .apply()
+            } else {
+                repository.syncProfileFromFirestore(savedUid)
+            }
         }
     }
 
@@ -110,13 +123,24 @@ class EarnViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // Auth actions
-    fun loginOrSignUp(email: String, username: String, referralApplied: String, password: String = "", onSuccess: () -> Unit) {
+    fun loginOrSignUp(email: String, username: String, referralApplied: String, password: String = "", rememberMe: Boolean, onSuccess: () -> Unit) {
         viewModelScope.launch {
             _isLoading.value = true
             delay(1000) // Simulating login verification network latency
             val success = repository.loginOrSignUp(email, username, referralApplied, password)
-            _isLoading.value = false
-            if (success) onSuccess()
+            if (success) {
+                val profile = repository.userProfile.firstOrNull()
+                val uid = profile?.uid ?: ""
+                prefs.edit()
+                    .putBoolean("is_logged_in", true)
+                    .putBoolean("remember_me", rememberMe)
+                    .putString("logged_in_uid", uid)
+                    .apply()
+                _isLoading.value = false
+                onSuccess()
+            } else {
+                _isLoading.value = false
+            }
         }
     }
 
@@ -124,11 +148,19 @@ class EarnViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _isLoading.value = true
             delay(500)
-            // For mock demo, we delete the profile record or clear state to simulate logout
-            // but keep Room database transactions
+            prefs.edit()
+                .putBoolean("is_logged_in", false)
+                .putString("logged_in_uid", null)
+                .putBoolean("remember_me", false)
+                .apply()
+            repository.logout()
             _isLoading.value = false
             onSuccess()
         }
+    }
+
+    fun isAutoLoginEnabled(): Boolean {
+        return prefs.getBoolean("remember_me", false) && prefs.getBoolean("is_logged_in", false)
     }
 
     // Daily Checkin Action

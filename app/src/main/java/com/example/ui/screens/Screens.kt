@@ -195,11 +195,10 @@ fun SplashScreen(
     LaunchedEffect(key1 = true) {
         startAnimation = true
         delay(2200)
-        val profile = viewModel.userProfile.value
-        if (profile == null) {
-            onNavigateNext("auth")
+        if (viewModel.isAutoLoginEnabled()) {
+            onNavigateNext("main_container")
         } else {
-            onNavigateNext("dashboard")
+            onNavigateNext("auth")
         }
     }
 
@@ -264,6 +263,7 @@ fun AuthScreen(
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var refCode by remember { mutableStateOf("") }
+    var rememberMe by remember { mutableStateOf(true) }
     val isLoading by viewModel.isLoading.collectAsState()
 
     val context = LocalContext.current
@@ -444,7 +444,30 @@ fun AuthScreen(
                                 )
                             )
 
-                            Spacer(modifier = Modifier.height(24.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = rememberMe,
+                                    onCheckedChange = { rememberMe = it },
+                                    colors = CheckboxDefaults.colors(
+                                        checkedColor = EmeraldPrimary,
+                                        uncheckedColor = Color.Gray
+                                    ),
+                                    modifier = Modifier.testTag("remember_me_checkbox")
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Remember Me",
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
 
                             if (isLoading) {
                                 CircularProgressIndicator(
@@ -459,7 +482,13 @@ fun AuthScreen(
                                         if (username.isBlank() || email.isBlank() || password.length < 4) {
                                             Toast.makeText(context, "Fill in all credentials correctly (Pass >= 4 chars)", Toast.LENGTH_SHORT).show()
                                         } else {
-                                            viewModel.loginOrSignUp(email, username, refCode, password) {
+                                            viewModel.loginOrSignUp(
+                                                email = email,
+                                                username = username,
+                                                referralApplied = refCode,
+                                                password = password,
+                                                rememberMe = rememberMe
+                                            ) {
                                                 Toast.makeText(context, "Auth Success! +100 Coins credited.", Toast.LENGTH_LONG).show()
                                                 onAuthSuccess()
                                             }
@@ -666,7 +695,12 @@ fun AuthScreen(
                                                 scope.launch {
                                                     delay(1000)
                                                     phoneLoading = false
-                                                    viewModel.loginOrSignUp("phone_${phoneNumber}@pkearnpro.com", "PhoneUser_${phoneNumber.takeLast(4)}", "") {
+                                                    viewModel.loginOrSignUp(
+                                                        email = "phone_${phoneNumber}@pkearnpro.com",
+                                                        username = "PhoneUser_${phoneNumber.takeLast(4)}",
+                                                        referralApplied = "",
+                                                        rememberMe = rememberMe
+                                                    ) {
                                                         Toast.makeText(context, "Phone Sign In Success! +100 Coins credited.", Toast.LENGTH_LONG).show()
                                                         onAuthSuccess()
                                                     }
@@ -724,7 +758,12 @@ fun AuthScreen(
                             scope.launch {
                                 delay(1500)
                                 googleLoading = false
-                                viewModel.loginOrSignUp("bindaas500@gmail.com", "Bindaas500", "") {
+                                viewModel.loginOrSignUp(
+                                    email = "bindaas500@gmail.com",
+                                    username = "Bindaas500",
+                                    referralApplied = "",
+                                    rememberMe = rememberMe
+                                ) {
                                     Toast.makeText(context, "Google Sign In Success! +100 Coins credited.", Toast.LENGTH_LONG).show()
                                     onAuthSuccess()
                                 }
@@ -763,7 +802,12 @@ fun AuthScreen(
                             scope.launch {
                                 delay(1500)
                                 googleLoading = false
-                                viewModel.loginOrSignUp("pk.earner.pro@gmail.com", "PKEarnerPro", "") {
+                                viewModel.loginOrSignUp(
+                                    email = "pk.earner.pro@gmail.com",
+                                    username = "PKEarnerPro",
+                                    referralApplied = "",
+                                    rememberMe = rememberMe
+                                ) {
                                     Toast.makeText(context, "Google Sign In Success! +100 Coins credited.", Toast.LENGTH_LONG).show()
                                     onAuthSuccess()
                                 }
@@ -1315,41 +1359,161 @@ fun DashboardScreen(
                     colors = CardDefaults.cardColors(containerColor = DarkSurface),
                     border = BorderStroke(1.dp, DarkSurfaceVariant)
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(20.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                            .padding(20.dp)
                     ) {
                         Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .background(BentoAccent.copy(alpha = 0.1f), CircleShape),
-                                contentAlignment = Alignment.Center
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
                             ) {
-                                Text("🤝", fontSize = 20.sp)
+                                Box(
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .background(BentoAccent.copy(alpha = 0.1f), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("🤝", fontSize = 20.sp)
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = "Referral Program",
+                                        style = MaterialTheme.typography.titleMedium.copy(
+                                            color = DarkText,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    )
+                                    Text(
+                                        text = "Earn +250 Coins for each user you invite!",
+                                        style = MaterialTheme.typography.bodySmall.copy(color = DarkTextSecondary)
+                                    )
+                                }
                             }
-                            Spacer(modifier = Modifier.width(12.dp))
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Referral Code display with Copy Option
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
+                                .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)), RoundedCornerShape(12.dp))
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Column {
                                 Text(
-                                    text = "Referral Program",
-                                    style = MaterialTheme.typography.titleMedium.copy(
-                                        color = DarkText,
-                                        fontWeight = FontWeight.Bold
+                                    text = "YOUR REFERRAL CODE",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        color = DarkTextSecondary,
+                                        letterSpacing = 1.sp
                                     )
                                 )
                                 Text(
-                                    text = "Earn 20% commission on referrals",
-                                    style = MaterialTheme.typography.bodySmall.copy(color = DarkTextSecondary)
+                                    text = profile?.referralCode ?: "PKPRO-XXXX-XX",
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        color = GoldAccent,
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 1.5.sp
+                                    ),
+                                    modifier = Modifier.testTag("referral_code_display")
+                                )
+                            }
+
+                            val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+                            val annotatedString = androidx.compose.ui.text.buildAnnotatedString { append(profile?.referralCode ?: "") }
+                            
+                            IconButton(
+                                onClick = {
+                                    if (!profile?.referralCode.isNullOrBlank()) {
+                                        clipboardManager.setText(annotatedString)
+                                        Toast.makeText(context, "Code copied to clipboard!", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                modifier = Modifier.testTag("copy_referral_code_btn")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ContentCopy,
+                                    contentDescription = "Copy code",
+                                    tint = BentoAccent
                                 )
                             }
                         }
 
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Stats Grid (Total Referrals & Total Referral Earnings)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            // Total Invites
+                            Card(
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.03f)),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f))
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(12.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(
+                                        text = "Total Referrals",
+                                        style = MaterialTheme.typography.bodySmall.copy(color = DarkTextSecondary)
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "${profile?.inviteCount ?: 0}",
+                                        style = MaterialTheme.typography.titleLarge.copy(
+                                            color = EmeraldPrimary,
+                                            fontWeight = FontWeight.Bold
+                                        ),
+                                        modifier = Modifier.testTag("referral_count_display")
+                                    )
+                                }
+                            }
+
+                            // Total Referral Earnings
+                            Card(
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.03f)),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f))
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(12.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(
+                                        text = "Referral Earnings",
+                                        style = MaterialTheme.typography.bodySmall.copy(color = DarkTextSecondary)
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "${profile?.referralEarningsCoins ?: 0} Coins",
+                                        style = MaterialTheme.typography.titleLarge.copy(
+                                            color = GoldAccent,
+                                            fontWeight = FontWeight.Bold
+                                        ),
+                                        modifier = Modifier.testTag("referral_earnings_display")
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Share Link button
                         Button(
                             onClick = {
                                 viewModel.shareReferral { text ->
@@ -1361,15 +1525,20 @@ fun DashboardScreen(
                                     context.startActivity(Intent.createChooser(sendIntent, "Share Referral Link"))
                                 }
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = BentoPrimary.copy(alpha = 0.2f)),
-                            modifier = Modifier.padding(start = 8.dp),
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                            colors = ButtonDefaults.buttonColors(containerColor = BentoAccent),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                                .testTag("share_referral_btn"),
+                            shape = RoundedCornerShape(14.dp)
                         ) {
+                            Icon(Icons.Default.Share, contentDescription = null, tint = Color.Black)
+                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Invite",
-                                color = BentoAccent,
+                                text = "Invite Friends & Earn",
+                                color = Color.Black,
                                 fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.labelMedium
+                                style = MaterialTheme.typography.titleSmall
                             )
                         }
                     }

@@ -147,17 +147,59 @@ class EarnRepository(
                 }
             }
 
+            val generatedCode = "PKPRO-${username.uppercase().take(4).padEnd(4, 'X')}-${uid.take(4).uppercase()}"
+            val isSelfReferral = referralCodeApplied.isNotBlank() && (
+                referralCodeApplied.trim().uppercase() == generatedCode.trim().uppercase() ||
+                referralCodeApplied.trim().lowercase() == email.trim().lowercase()
+            )
+            val finalRefCode = if (isSelfReferral) "" else referralCodeApplied.trim()
+
+            // If a valid referral code was applied, try to find and reward the referrer in Firestore!
+            if (finalRefCode.isNotEmpty() && firestore != null) {
+                try {
+                    val queryTask = firestore!!.collection("Users")
+                        .whereEqualTo("referralCode", finalRefCode)
+                        .get()
+                    val querySnapshot = com.google.android.gms.tasks.Tasks.await(queryTask)
+                    if (!querySnapshot.isEmpty) {
+                        val referrerDoc = querySnapshot.documents.first()
+                        val referrerUid = referrerDoc.id
+                        
+                        // Enforce no self-referral using their firestore UID too
+                        if (referrerUid != uid) {
+                            val currentBal = referrerDoc.getLong("coinBalance")?.toInt() ?: 0
+                            val currentTotal = referrerDoc.getLong("totalEarningsCoins")?.toInt() ?: 0
+                            val currentRefEarn = referrerDoc.getLong("referralEarningsCoins")?.toInt() ?: 0
+                            val currentInvites = referrerDoc.getLong("inviteCount")?.toInt() ?: 0
+                            
+                            val referrerUpdate = mapOf(
+                                "coinBalance" to currentBal + 250,
+                                "totalEarningsCoins" to currentTotal + 250,
+                                "referralEarningsCoins" to currentRefEarn + 250,
+                                "inviteCount" to currentInvites + 1,
+                                "recentActivityText" to "Referred user: $username!"
+                            )
+                            com.google.android.gms.tasks.Tasks.await(
+                                firestore!!.collection("Users").document(referrerUid).update(referrerUpdate)
+                            )
+                        }
+                    }
+                } catch (e: Exception) {
+                    // Ignore background referrer update failures if offline
+                }
+            }
+
             val profile = UserProfileEntity(
                 uid = uid,
                 username = username,
                 email = email,
-                coinBalance = if (referralCodeApplied.isNotEmpty()) 350 else 100, // 250 bonus for referral
-                totalEarningsCoins = if (referralCodeApplied.isNotEmpty()) 350 else 100,
+                coinBalance = if (finalRefCode.isNotEmpty()) 350 else 100, // 250 bonus for referral
+                totalEarningsCoins = if (finalRefCode.isNotEmpty()) 350 else 100,
                 referralEarningsCoins = 0,
-                referralCode = "PKPRO-${username.uppercase().take(4)}-${uid.take(2)}",
+                referralCode = generatedCode,
                 userLevel = 1,
                 progress = 0.05f,
-                recentActivityText = "Joined PK Earn Pro! Welcome bonus received."
+                recentActivityText = if (finalRefCode.isNotEmpty()) "Joined via referral code '$finalRefCode'! Welcome bonus received." else "Joined PK Earn Pro! Welcome bonus received."
             )
             earnDao.insertOrUpdateProfile(profile)
             earnDao.insertTransaction(
@@ -169,12 +211,12 @@ class EarnRepository(
                 )
             )
 
-            if (referralCodeApplied.isNotEmpty()) {
+            if (finalRefCode.isNotEmpty()) {
                 earnDao.insertTransaction(
                     TransactionEntity(
                         type = "Referral Bonus",
                         coins = 250,
-                        description = "Referral code '$referralCodeApplied' applied",
+                        description = "Referral code '$finalRefCode' applied",
                         status = "SUCCESS"
                     )
                 )
@@ -394,6 +436,56 @@ class EarnRepository(
         withContext(Dispatchers.IO) {
             earnDao.updateLastScratchTimestamp(uid, timestamp)
             syncProfileToFirestore(uid)
+        }
+    }
+
+    suspend fun logout() {
+        withContext(Dispatchers.IO) {
+            earnDao.clearUserProfile()
+            try {
+                firebaseAuth?.signOut()
+            } catch (e: Exception) {}
+        }
+    }
+
+    suspend fun syncProfileFromFirestore(uid: String) {
+        withContext(Dispatchers.IO) {
+            val db = firestore
+            if (db != null) {
+                try {
+                    val userDocTask = db.collection("Users").document(uid).get()
+                    val document = com.google.android.gms.tasks.Tasks.await(userDocTask)
+                    if (document.exists()) {
+                        val currentProfile = earnDao.getUserProfile().firstOrNull()
+                        val username = document.getString("username") ?: currentProfile?.username ?: ""
+                        val email = document.getString("email") ?: currentProfile?.email ?: ""
+                        val coinBalance = document.getLong("coinBalance")?.toInt() ?: currentProfile?.coinBalance ?: 100
+                        val totalEarnings = document.getLong("totalEarningsCoins")?.toInt() ?: currentProfile?.totalEarningsCoins ?: 100
+                        val referralEarnings = document.getLong("referralEarningsCoins")?.toInt() ?: currentProfile?.referralEarningsCoins ?: 0
+                        val referralCode = document.getString("referralCode") ?: currentProfile?.referralCode ?: ""
+                        val inviteCount = document.getLong("inviteCount")?.toInt() ?: currentProfile?.inviteCount ?: 0
+                        val isFrozen = document.getBoolean("isFrozen") ?: currentProfile?.isFrozen ?: false
+
+                        val updatedProfile = UserProfileEntity(
+                            uid = uid,
+                            username = username,
+                            email = email,
+                            coinBalance = coinBalance,
+                            totalEarningsCoins = totalEarnings,
+                            referralEarningsCoins = referralEarnings,
+                            referralCode = referralCode,
+                            inviteCount = inviteCount,
+                            isFrozen = isFrozen,
+                            userLevel = currentProfile?.userLevel ?: 1,
+                            progress = currentProfile?.progress ?: 0.05f,
+                            recentActivityText = document.getString("recentActivityText") ?: currentProfile?.recentActivityText ?: "Synced profile with cloud."
+                        )
+                        earnDao.insertOrUpdateProfile(updatedProfile)
+                    }
+                } catch (e: Exception) {
+                    // Ignore errors if offline
+                }
+            }
         }
     }
 
