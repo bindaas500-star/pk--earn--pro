@@ -21,19 +21,12 @@ jobs:
         distribution: 'temurin'
         cache: gradle
 
-    - name: Validate and Regenerate Gradle Wrapper if corrupt
+    - name: Regenerate Gradle Wrapper
       run: |
-        if [ -f gradle/wrapper/gradle-wrapper.jar ]; then
-          JAR_SIZE=$(wc -c < gradle/wrapper/gradle-wrapper.jar)
-          if [ "$JAR_SIZE" -lt 10000 ]; then
-            echo "gradle-wrapper.jar is too small ($JAR_SIZE bytes), likely corrupt. Removing..."
-            rm -f gradle/wrapper/gradle-wrapper.jar
-          fi
-        fi
-        if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
-          echo "Regenerating gradle wrapper..."
-          gradle wrapper
-        fi
+        echo "Deleting committed gradle-wrapper.jar to prevent corruption issues..."
+        rm -f gradle/wrapper/gradle-wrapper.jar
+        echo "Running pre-installed Gradle to generate a fresh, uncorrupted wrapper JAR..."
+        gradle wrapper
 
     - name: Grant execute permission for gradlew
       run: |
