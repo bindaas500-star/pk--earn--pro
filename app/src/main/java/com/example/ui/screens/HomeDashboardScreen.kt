@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import android.widget.Toast
+import android.app.Activity
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -117,7 +118,12 @@ fun HomeDashboardScreen(
             item {
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(
-                    onClick = { /* Handle ad */ },
+                    onClick = { 
+                        viewModel.showRewardedAd(
+                            activity = context as Activity, 
+                            onMessage = { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
+                        )
+                    },
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = BentoAccent),
                     shape = RoundedCornerShape(16.dp)

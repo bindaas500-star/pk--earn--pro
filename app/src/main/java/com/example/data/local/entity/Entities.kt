@@ -21,7 +21,9 @@ data class UserProfileEntity(
     val inviteCount: Int = 0,
     val ipAddress: String = "192.168.1.1",
     val deviceVerified: Boolean = true,
-    val isFrozen: Boolean = false
+    val isFrozen: Boolean = false,
+    val lastSpinTimestamp: Long = 0L,
+    val lastScratchTimestamp: Long = 0L
 )
 
 @Entity(tableName = "transaction_history")

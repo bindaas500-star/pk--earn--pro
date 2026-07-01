@@ -264,7 +264,7 @@ fun MainContainer(
     ) { innerPadding ->
         NavHost(
             navController = subNavController,
-            startDestination = "leaderboard",
+            startDestination = "dashboard",
             modifier = Modifier.padding(innerPadding)
         ) {
             composable("dashboard") {

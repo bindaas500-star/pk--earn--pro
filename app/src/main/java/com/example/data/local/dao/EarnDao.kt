@@ -22,6 +22,12 @@ interface EarnDao {
     @Query("UPDATE user_profile SET isFrozen = :isFrozen WHERE uid = :uid")
     suspend fun freezeAccount(uid: String, isFrozen: Boolean)
 
+    @Query("UPDATE user_profile SET lastSpinTimestamp = :timestamp WHERE uid = :uid")
+    suspend fun updateLastSpinTimestamp(uid: String, timestamp: Long)
+
+    @Query("UPDATE user_profile SET lastScratchTimestamp = :timestamp WHERE uid = :uid")
+    suspend fun updateLastScratchTimestamp(uid: String, timestamp: Long)
+
     // Transaction History Queries
     @Query("SELECT * FROM transaction_history ORDER BY timestamp DESC")
     fun getAllTransactions(): Flow<List<TransactionEntity>>

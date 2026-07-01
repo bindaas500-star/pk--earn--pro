@@ -383,6 +383,20 @@ class EarnRepository(
         minWithdrawalCoins = coins
     }
 
+    suspend fun updateLastSpinTimestamp(uid: String, timestamp: Long) {
+        withContext(Dispatchers.IO) {
+            earnDao.updateLastSpinTimestamp(uid, timestamp)
+            syncProfileToFirestore(uid)
+        }
+    }
+
+    suspend fun updateLastScratchTimestamp(uid: String, timestamp: Long) {
+        withContext(Dispatchers.IO) {
+            earnDao.updateLastScratchTimestamp(uid, timestamp)
+            syncProfileToFirestore(uid)
+        }
+    }
+
     private suspend fun syncProfileToFirestore(uid: String) {
         val auth = firebaseAuth
         val db = firestore

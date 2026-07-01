@@ -46,6 +46,13 @@ import com.example.ui.theme.*
 import com.example.ui.viewmodel.EarnViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 
 // Custom Glassmorphism Card Modifier helper
 @Composable
@@ -1549,6 +1556,24 @@ fun SpinWheelScreen(
     var isSpinning by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val profile by viewModel.userProfile.collectAsState()
+    var showRewardPopup by remember { mutableStateOf(false) }
+    var rewardEarned by remember { mutableStateOf(0) }
+
+    val lastSpin = profile?.lastSpinTimestamp ?: 0L
+    val currentTime = System.currentTimeMillis()
+    val canSpin = lastSpin == 0L || (currentTime - lastSpin) >= 24 * 60 * 60 * 1000L
+
+    if (showRewardPopup) {
+        AlertDialog(
+            onDismissRequest = { showRewardPopup = false },
+            title = { Text("Congratulations!") },
+            text = { Text("You won $rewardEarned coins!") },
+            confirmButton = {
+                Button(onClick = { showRewardPopup = false }) { Text("OK") }
+            }
+        )
+    }
 
     val spinRotation = animateFloatAsState(
         targetValue = rotationAngle,
@@ -1627,30 +1652,41 @@ fun SpinWheelScreen(
 
         Button(
             onClick = {
-                if (!isSpinning) {
+                if (!isSpinning && canSpin) {
                     isSpinning = true
                     // Spin several full rotations plus a random offset (0 to 360)
-                    val rewardCoins = listOf(20, 50, 10, 150, 5, 200, 30, 100).random()
-                    rotationAngle += 1440f + (360f * (rewardCoins.toFloat() / 200f))
+                    val rewardCoins = listOf(10, 20, 50, 100, 200, 500).random()
+                    rotationAngle = (rotationAngle % 360f) + 1440f + (360f * (rewardCoins.toFloat() / 500f))
 
                     scope.launch {
                         delay(2200)
                         viewModel.playSpinWheel(rewardCoins) { msg ->
-                            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
-                            com.example.data.notification.NotificationHelper.showRewardNotification(context, "Spin Wheel Fortune", rewardCoins)
+                            if (msg.contains("won")) {
+                                rewardEarned = rewardCoins
+                                showRewardPopup = true
+                            } else {
+                                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                            }
                             isSpinning = false
                         }
                     }
                 }
             },
-            colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
+            colors = ButtonDefaults.buttonColors(containerColor = if (canSpin) EmeraldPrimary else Color.Gray),
             modifier = Modifier
                 .fillMaxWidth()
                 .height(55.dp)
                 .testTag("spin_wheel_btn"),
-            enabled = !isSpinning
+            enabled = !isSpinning && canSpin
         ) {
             Text(if (isSpinning) "Spinning..." else "Spin & Win Coins", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        }
+
+        if (!canSpin) {
+            val timeLeft = (24 * 60 * 60 * 1000L - (currentTime - lastSpin)) / 1000
+            val hours = timeLeft / 3600
+            val minutes = (timeLeft % 3600) / 60
+            Text("Next spin in: ${hours}h ${minutes}m", color = Color.Gray, modifier = Modifier.padding(top = 8.dp))
         }
 
         Spacer(modifier = Modifier.weight(1f))
@@ -1667,6 +1703,28 @@ fun ScratchCardScreen(
     var isRevealing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val profile by viewModel.userProfile.collectAsState()
+    var showRewardPopup by remember { mutableStateOf(false) }
+    var rewardEarned by remember { mutableStateOf(0) }
+    
+    val lastScratch = profile?.lastScratchTimestamp ?: 0L
+    val currentTime = System.currentTimeMillis()
+    val canScratch = lastScratch == 0L || (currentTime - lastScratch) >= 24 * 60 * 60 * 1000L
+
+    var paths by remember { mutableStateOf(listOf<Path>()) }
+    var currentPath by remember { mutableStateOf(Path()) }
+    var scratchedArea by remember { mutableStateOf(0f) }
+
+    if (showRewardPopup) {
+        AlertDialog(
+            onDismissRequest = { showRewardPopup = false },
+            title = { Text("Congratulations!") },
+            text = { Text("You won $rewardEarned coins!") },
+            confirmButton = {
+                Button(onClick = { showRewardPopup = false }) { Text("OK") }
+            }
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -1689,75 +1747,91 @@ fun ScratchCardScreen(
         Spacer(modifier = Modifier.weight(1f))
 
         // Scratch Card Area
-        Card(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(240.dp)
-                .clickable {
-                    if (!isScratched && !isRevealing) {
-                        isRevealing = true
-                        scope.launch {
-                            delay(1200) // Scratch duration
-                            isScratched = true
-                            isRevealing = false
-                            val coins = (50..250).random()
-                            viewModel.playScratchCard(coins) { msg ->
-                                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
-                                com.example.data.notification.NotificationHelper.showRewardNotification(context, "Scratch Card Jackpot", coins)
-                            }
-                        }
-                    }
-                },
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.05f)),
-            border = BorderStroke(2.dp, GoldAccent.copy(alpha = 0.4f))
+                .clip(RoundedCornerShape(20.dp))
+                .background(Color.White.copy(alpha = 0.05f))
+                .border(2.dp, GoldAccent.copy(alpha = 0.4f), RoundedCornerShape(20.dp))
         ) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                if (!isScratched) {
-                    // Golden overlay cover
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(
-                                Brush.linearGradient(
-                                    colors = listOf(Color(0xFFE5A93B), Color(0xFFF59E0B), Color(0xFFD97706))
-                                )
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(imageVector = Icons.Default.Gesture, contentDescription = null, tint = Color.White, modifier = Modifier.size(48.dp))
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                if (isRevealing) "Scratching surface..." else "Tap & Rub to Scratch!",
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                        }
-                    }
-                } else {
-                    // Revealed Reward
+            if (canScratch) {
+                // Reward text revealed underneath
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(imageVector = Icons.Default.MonetizationOn, contentDescription = null, tint = GoldAccent, modifier = Modifier.size(64.dp))
                         Spacer(modifier = Modifier.height(12.dp))
-                        Text("CONGRATULATIONS!", color = GoldAccent, fontWeight = FontWeight.ExtraBold, letterSpacing = 2.sp)
-                        Text("Legit Coins Credited successfully!", color = Color.LightGray, style = MaterialTheme.typography.bodySmall)
+                        Text("JACKPOT!", color = GoldAccent, fontWeight = FontWeight.ExtraBold, letterSpacing = 2.sp)
                     }
+                }
+
+                // Scratch overlay
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(Unit) {
+                            detectDragGestures(
+                                onDragStart = { offset ->
+                                    currentPath = Path()
+                                    currentPath.moveTo(offset.x, offset.y)
+                                    paths = paths + currentPath
+                                },
+                                onDrag = { change, dragAmount ->
+                                    currentPath.lineTo(change.position.x, change.position.y)
+                                    
+                                    // Simple scratch area calculation
+                                    scratchedArea += dragAmount.getDistance()
+                                    if (scratchedArea > 2000f && !isRevealing && !isScratched) {
+                                        isRevealing = true
+                                        scope.launch {
+                                            val coins = listOf(10, 20, 50, 100, 200, 500).random()
+                                            viewModel.playScratchCard(coins) { msg ->
+                                                if (msg.contains("won")) {
+                                                    rewardEarned = coins
+                                                    showRewardPopup = true
+                                                } else {
+                                                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                                                }
+                                                isScratched = true
+                                                isRevealing = false
+                                            }
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                ) {
+                    drawRect(
+                        Brush.linearGradient(
+                            colors = listOf(Color(0xFFE5A93B), Color(0xFFF59E0B), Color(0xFFD97706))
+                        )
+                    )
+                    
+                    // Clear the scratched path
+                    paths.forEach { path ->
+                        drawPath(
+                            path = path,
+                            color = Color.Transparent,
+                            style = Stroke(width = 40.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
+                            blendMode = BlendMode.Clear
+                        )
+                    }
+                }
+            } else {
+                // Already scratched/waiting
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Come back tomorrow!", color = Color.Gray)
                 }
             }
         }
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        if (isScratched) {
-            Button(
-                onClick = { isScratched = false },
-                colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
-                modifier = Modifier.fillMaxWidth().height(50.dp)
-            ) {
-                Text("Get Another Card", fontWeight = FontWeight.Bold)
-            }
+        if (!canScratch) {
+            val timeLeft = (24 * 60 * 60 * 1000L - (currentTime - lastScratch)) / 1000
+            val hours = timeLeft / 3600
+            val minutes = (timeLeft % 3600) / 60
+            Text("Next scratch in: ${hours}h ${minutes}m", color = Color.Gray, modifier = Modifier.padding(top = 8.dp))
         }
 
         Spacer(modifier = Modifier.weight(1f))

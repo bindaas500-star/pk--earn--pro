@@ -162,9 +162,20 @@ class EarnViewModel(application: Application) : AndroidViewModel(application) {
     fun playSpinWheel(coinsEarned: Int, onComplete: (String) -> Unit) {
         viewModelScope.launch {
             val profile = userProfile.value ?: return@launch
+            
+            // Check if 24 hours have passed since last spin
+            val lastSpin = profile.lastSpinTimestamp
+            val currentTime = System.currentTimeMillis()
+            if (lastSpin != 0L && (currentTime - lastSpin) < 24 * 60 * 60 * 1000L) {
+                val timeLeft = (24 * 60 * 60 * 1000L - (currentTime - lastSpin)) / 1000 / 60
+                onComplete("Wait ${timeLeft} minutes to spin again!")
+                return@launch
+            }
+            
             _isLoading.value = true
             delay(2000) // Spin delay
             repository.addGameCoins(profile.uid, "Spin Wheel Fortune", coinsEarned)
+            repository.updateLastSpinTimestamp(profile.uid, currentTime)
             _isLoading.value = false
             onComplete("You won $coinsEarned Gold Coins!")
         }
@@ -174,11 +185,21 @@ class EarnViewModel(application: Application) : AndroidViewModel(application) {
     fun playScratchCard(coinsEarned: Int, onComplete: (String) -> Unit) {
         viewModelScope.launch {
             val profile = userProfile.value ?: return@launch
+            
+            // Check if 24 hours have passed since last scratch
+            val lastScratch = profile.lastScratchTimestamp
+            val currentTime = System.currentTimeMillis()
+            if (lastScratch != 0L && (currentTime - lastScratch) < 24 * 60 * 60 * 1000L) {
+                val timeLeft = (24 * 60 * 60 * 1000L - (currentTime - lastScratch)) / 1000 / 60
+                onComplete("Wait ${timeLeft} minutes to scratch again!")
+                return@launch
+            }
+            
             _isLoading.value = true
-            delay(1000) // Scratch simulation delay
             repository.addGameCoins(profile.uid, "Scratch Card Reveal", coinsEarned)
+            repository.updateLastScratchTimestamp(profile.uid, currentTime)
             _isLoading.value = false
-            onComplete("Scratched and earned $coinsEarned Coins!")
+            onComplete("You won $coinsEarned Gold Coins!")
         }
     }
 
