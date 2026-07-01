@@ -28,6 +28,22 @@ jobs:
         echo "Running pre-installed Gradle to generate a fresh, uncorrupted wrapper JAR..."
         gradle wrapper
 
+    - name: Decode Debug Keystore
+      run: |
+        if [ -f debug.keystore.base64 ]; then
+          echo "Decoding debug.keystore.base64 into debug.keystore..."
+          base64 -d debug.keystore.base64 > debug.keystore
+        else
+          echo "debug.keystore.base64 not found!"
+        fi
+
+    - name: Prepare secrets (.env)
+      run: |
+        if [ -f .env.example ]; then
+          echo "Copying .env.example to .env..."
+          cp .env.example .env
+        fi
+
     - name: Grant execute permission for gradlew
       run: |
         if [ -f gradlew ]; then
@@ -40,16 +56,16 @@ jobs:
     - name: Build with Gradle
       run: |
         if [ -f gradlew ]; then
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug --stacktrace
         else
           echo "Searching for gradlew in subdirectories..."
           GRADLEW_PATH=$(find . -name gradlew -print -quit)
           if [ -n "$GRADLEW_PATH" ]; then
             cd $(dirname "$GRADLEW_PATH")
-            ./gradlew assembleDebug
+            ./gradlew assembleDebug --stacktrace
           else
             echo "gradlew not found. Trying global gradle..."
-            gradle assembleDebug
+            gradle assembleDebug --stacktrace
           fi
         fi
 
